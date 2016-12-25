@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link rel="stylesheet" type="text/css" href="font-awesome/css/font-awesome.min.css">
+<title>my audio</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+	padding: 5%;
+	font-family: "微软雅黑";
+	-webkit-tap-highlight-color: transparent;
+}
+
+.audio-container {
+    width: 438px;
+    background: yellow;
+}
+
+.my-audio {    
+    font-size: 0;
+    margin: 0 auto;
+    position: relative;
+    background: rgba(60, 60, 75, 0.9);
+    width: 100%;
+    height: 44px;
+}
+
+.button-box {
+    display: inline-block;
+    width: 44px;
+    text-align: center;
+    height: 100%;
+}
+
+.play-controller {
+    position: relative;
+    top: 50%;
+    transform: translate(0,-50%);
+	border: transparent;
+	color: #fff;
+    font-size: 22px!important;
+    cursor: pointer;
+}
+
+.bar-wrapper {
+    vertical-align: top;
+    display: inline-block;
+    width: 320px;
+    height: 100%;
+}
+
+.progress-bar {
+    position: relative;
+    top: 50%;
+    transform: translate(0,-50%);
+    width: 100%;
+	height: 6px;
+    background: rgba(157, 158, 158, 1);
+    font-size: 0;
+}
+
+.buffered-range {
+    display: inline-block; 
+    background: rgba(60, 60, 75, 1);
+    height: inherit;
+}
+
+.played-range {
+    display: inline-block;
+    width: 0;
+    background: rgba(216, 216, 219, 1);
+    height: inherit;
+}
+
+.drag-ball {
+    position: relative;
+    height: 12px;
+    width: 12px;
+    left: 100%;
+    top:50%;
+    transform: translate(-50%,-50%);
+    border-radius: 50px;
+    background: #fff;
+}
+
+.time-box {
+    float: right;
+    margin-top: 30px;
+    width: 100px;
+    font-size: 10px;
+    color: #fff;
+}
+
+.time-detail {
+    position: relative;
+    text-align: center;
+    top: 50%;
+    transform: translate(0,-50%);
+}
+
+.speed-box {
+    float: right;
+    clear: both;
+    width: 44px;
+    height: 100%;
+    color: #fff;
+}
+
+.speed {
+    position: relative;
+    top: 50%;
+    transform: translate(0,-50%);
+}
+
+.speed p {
+    text-align: center;
+    font-size: 10px;
+}
+</style>
+<script type="text/javascript" src="EventEmitter.js"></script>
+<script type="text/javascript" src="jquery.min.js"></script>
+</head>
+
+<body>
+<audio id="audio" src=""  loop="loop"></audio>
+<div class="audio-container">
+    <div id="my-audio" class="my-audio">
+        <div class="button-box">
+            <i id="play-controller" class="fa fa-play play-controller"></i>
+        </div>
+        
+        <div id="bar-wrapper" class="bar-wrapper">
+            <div id="progress-bar" class="progress-bar">
+                <div id="played-range" class="played-range">
+                    <div id="drag-ball" class="drag-ball"></div>
+                </div>
+                <div id="buffered-range" class="buffered-range"></div>
+            </div>
+             <div class="time-box">
+                    <div class="time-detail">
+                        <span id="current-time">00:00:00</span>/<span id="audio-duration">00:00:00</span>
+                    </div>                
+                </div>
+        </div>
+        <div class="speed-box">
+            <div class="speed">
+                <p>1.0<br>倍速</p>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+(function($) {
+    getBarWidth();
+    getSong();
+})(jQuery);
+
+var barWidth;
+var ox = 0;
+var left = 0;
+var oldLeft = 0;
+var statu = false;
+var newTime = 0;
+var progBarLeft = 0;
+//UI：获取进度条宽度
+function getBarWidth() {
+    var $barWrapper = $('#bar-wrapper');
+    var $myAudio = $('#my-audio');
+    var audioWidth = $myAudio.width();
+    window.barWidth = (parseInt(audioWidth) - 88);
+    $barWrapper.width(barWidth);
+}
+//获取音频资源
+function getSong() { 
+    audio = document.getElementById("audio");
+    audio.src = "http://playback2.duobeiyun.com/jze9087c3cb20148a3b992ea51b438cd75/streams/out-audio-jz38495f9861824801983bc87219637f3f_f_1479106927926_t_1479121820975.m4a";
+    addAudioEventListener();
+    checkStorage();
+}
+//开始监控audio事件
+function addAudioEventListener() {
+    //音频metadata加载完成；UI：显示音频总时间
+    audio.addEventListener('loadedmetadata', function() {
+        timeFilter(audio.duration, "audio-duration");
+    }, false);
+    //音频正在缓存
+    audio.addEventListener('progress', function() {
+        EE_fire("AUDIO_ON_PROGRESS");
+    }, false);
+    //播放时间改变；实时保存播放状态
+    audio.addEventListener('timeupdate', function() {
+        newTime = audio.currentTime;
+        localStorage.setItem('storCurTime', audio.currentTime);
+        setPlyRange(newTime);
+        setPlyTime(newTime);
+    }, false);
+}
+//检测并获取本地保存的时间进度
+function checkStorage() {
+    if (localStorage.getItem('storCurTime')) {
+        setCurTime();
+    } else {
+        addClickListeners();
+    }
+}
+//有本地的时间进度时，调整播放时间
+function setCurTime() {
+    audio.addEventListener('loadedmetadata', function() {
+        var maxWidth = $('#progressBar').width();
+        var newTime = 0;
+        console.log("setCurTime", localStorage.getItem('storCurTime'));
+        audio.currentTime = localStorage.getItem('storCurTime');
+        newTime = audio.currentTime;
+        setPlyRange(newTime);
+        setPlyTime(newTime);
+        addClickListeners();
+    }, false);
+}
+//UI：setCurTime之后改变播放进度条
+function setPlyRange(time) {
+    var $plyRange = $('#played-range');
+    var newWidth = (time / audio.duration) * barWidth;
+    console.log("time--", time, "duration--", audio.duration, "barWidth--", barWidth, "newWidth--", newWidth);
+    $plyRange.width(newWidth);
+}
+//UI：setCurTime之后改变播放时间
+function setPlyTime(time) {
+    timeFilter(time, "current-time");
+}
+//UI：显示加载进度条
+EE_on("AUDIO_ON_PROGRESS", showBuf);
+function showBuf() {
+    for (var i = audio.buffered.length - 1; i >= 0; i--) {
+        console.log("buffered ", i, ' -- ', audio.currentTime, ' == ', audio.buffered.start(i), audio.buffered.end(i));
+        if (audio.buffered.start(i) < audio.currentTime && audio.buffered.end(i) > audio.currentTime) {
+                var $bufferedRange = $('#buffered-range');
+                var $plyRange = $('#played-range');
+                // var endTime = audio.buffered.end(i);
+                console.log("endTimeI ", i, "audio currentTime: ", audio.currentTime, " buffered start: ", audio.buffered.start(i), " buffered end: ", audio.buffered.end(i));
+                var bufRange = ((audio.buffered.end(i) - audio.currentTime) / audio.duration) * barWidth;
+                // console.log("bufRange ", bufRange, audio.currentTime);
+                $('#buffered-range').width(parseInt(bufRange));
+        }
+    }
+}
+//添加控制事件
+function addClickListeners() {
+    //播放开关点击事件
+    $('#play-controller').click(function() {
+        if ($('#play-controller').hasClass('fa-play')) {
+            $('#play-controller').addClass('fa-pause').removeClass('fa-play');
+            audio.play();//播放
+        } else {
+            $('#play-controller').addClass('fa-play').removeClass('fa-pause');
+            audio.pause();//暂停
+        }
+    });
+    //mousedown事件；控制audio暂停
+    $('#bar-wrapper').mousedown(function(e) {
+        ox = e.pageX - left;
+        statu = true;
+        progBarLeft = $('#progress-bar').offset().left;
+        left = e.pageX - progBarLeft;
+        limit = parseInt(barWidth) - 1;
+        if (left < 0) {
+            left = 0;
+        }
+        if (left > barWidth) {
+            left = barWidth;
+        }
+        $('#played-range').width(left);
+        oldLeft = left;
+        newTime = (left / barWidth) * audio.duration;
+        audio.currentTime = newTime;
+        setPlyTime(newTime);
+        setPlyRange(newTime);
+        $('#play-controller').addClass('fa-play').removeClass('fa-pause');
+        audio.pause();
+    });
+    //mousemove事件；控制播放器时间
+    $('body').mousemove(function(e) {
+        if (statu) {
+            left = e.pageX - ox;
+            //区域判断
+            if (left < 0) {
+                left = 0;
+            }
+            if (left > barWidth) {
+                left = barWidth;
+            }
+            $('#played-range').width(left);
+            newTime = (left / barWidth) * audio.duration;
+            setPlyTime(newTime);
+            setPlyRange(newTime);
+            //避免buffer条超出audio
+            totalWidth = parseInt($('#played-range').width() + $('#buffered-range').width());
+            if (totalWidth > barWidth) {
+                $('#buffered-range').width(0);
+            }
+        }
+    });
+    //mouseup事件
+    $('#bar-wrapper').mouseup(function() {
+        $('#play-controller').addClass('fa-pause').removeClass('fa-play');
+        audio.play();//播放
+        statu = false;
+        newTime = (left / barWidth) * audio.duration;
+        audio.currentTime = newTime;
+        totalWidth = parseInt($('#played-range').width() + $('#buffered-range').width());
+        if (totalWidth > barWidth) {
+            $('#buffered-range').width(0);
+        }
+    });
+}
+
+
+
+
+
+
+
+//tools
+//修改时间的显示格式
+function timeFilter(time, timePlace) {
+    var timePlace = document.getElementById(timePlace);
+    var hour = time / 3600;
+    var hours = parseInt(hour);
+    if (hours < 10) {
+        hours = "0" + hours;
+    }
+    var minute = time / 60 - 60 * hours ;
+    var minutes = parseInt(minute);
+    if (minutes < 10) {
+        minutes = "0" + minutes;
+    }
+    var second = time % 60;
+    seconds = parseInt(second);
+    if (seconds < 10) {
+        seconds = "0" + seconds;
+    }
+    var allTime = "" + hours + "" + ":" + "" + minutes + "" + ":" + "" + seconds + "";
+    timePlace.innerHTML = allTime;
+}
+</script>
+</body>
+</html>
